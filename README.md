@@ -11,7 +11,7 @@ This project showcases an interactive and draggable toolbar built using **React 
 
 | Regular Toolbar | Dragging an Item | Moving the Toolbar |
 |----------------|-----------------|-------------------|
-| ![Regular Toolbar](./assets/ss1.png) | ![Dragging an Item](./assets/ss2.png) | ![Moving the Toolbar](./assets/ss3.png) |
+| ![Moving the Toolbar](./assets/ss3.png) | ![Dragging an Item](./assets/ss1.png) | ![Regular Toolbar](./assets/ss2.png) |
 
 ## 🚀 Features
 
