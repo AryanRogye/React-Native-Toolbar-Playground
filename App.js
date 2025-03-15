@@ -1,9 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Image, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Image, SafeAreaView, StyleSheet, Text, View, Dimensions } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { useAnimatedReaction, useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, Layout, runOnJS, SlideInDown, SlideOutUp, useAnimatedReaction, useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
 export function RenderToolbarButton(
     { 
@@ -14,9 +15,9 @@ export function RenderToolbarButton(
         activeItemIndex,
         scrollOffset,
         toolbarY,
-        move_tool_bar_y
+        move_tool_bar_y,
+        isLeftHanded
     }) {
-    const isLeftHanded = false;
     
     // Use useDerivedValue instead of useSharedValue to dynamically update with scrollOffset
     const visibleTop = useDerivedValue(() => {
@@ -49,6 +50,11 @@ export function RenderToolbarButton(
             if (active && activeItemIndex.value === -1) {
                 console.log("Active Item: ", index);
                 activeItemIndex.value = index;
+
+                // if it has a func then execute it
+                if (item.func) {
+                    runOnJS(item.func)();  // <--- use runOnJS here
+                }
             }
         }
     );
@@ -110,7 +116,21 @@ export function RenderToolbarButton(
 }
 
 export default function App() {
+
+    const { width, height } = Dimensions.get('window');
+    const [isLeftHanded, setIsLeftHanded] = useState(false);
+
+    const [isToolbarOpen, setIsOpen] = useState(false);
+    const toggleToolbar = () => {
+        setIsOpen(!isToolbarOpen);
+    }
+
+    /*
+    *   This component will render a scrolling toolbar with multiple buttons.
+    *   Each button will have a title and an icon.
+    */
     const ToolBarButtons = [
+        { title: "Close", icon: "close-circle-outline", color: "#FF0000", func: toggleToolbar }, // Red
         { title: "Refresh", icon: "refresh-circle-outline", color: "#1E90FF" }, // DodgerBlue
         { title: "Start Auto Refresh", icon: "play-circle-outline", color: "#32CD32" }, // LimeGreen
         { title: "Clear Alerts", icon: "trash-outline", color: "#FF4500" }, // OrangeRed
@@ -118,6 +138,16 @@ export default function App() {
         { title: "Toggle Follow", icon: "compass-outline", color: "#8A2BE2" }, // BlueViolet
         { title: "Show Filters", icon: "funnel-outline", color: "#17A2B8" },
     ];
+
+    const ToolBarButtonsClosed = [
+        { title: "Open", icon: "chevron-up-outline", color: "#FF0000", func: toggleToolbar }, // Red
+    ];
+
+
+    /*
+        This is used to calculate the position of the toolbar from the top of the screen, this is so that we know where the begining of the toolbar
+        is and can use it to determine where you tap
+    */
     const [toolbarY, setToolbarY] = useState(0);
     const toolbarRef = useRef(null);
 
@@ -125,6 +155,7 @@ export default function App() {
     const activeItemIndex = useSharedValue(-1);
     const scrollOffset = useSharedValue(0);
 
+    // Drag Gesture for the toolbar
     const dragGesture = Gesture.Pan()
     .onStart(e => {
         activeY.value = e.absoluteY;
@@ -144,16 +175,30 @@ export default function App() {
     const offsetX = useSharedValue(0);
     const offsetY = useSharedValue(0);
 
+    const updateHandedness = (absoluteX) => {
+        try {
+            if (typeof absoluteX === 'number' && !isNaN(absoluteX)) {
+                setIsLeftHanded(absoluteX < width / 2);
+            }
+        } catch (error) {
+            console.warn('Error updating handedness:', error);
+        }
+    };
+
     const move_tool_bar = Gesture.Pan()
     .onUpdate(e => {
         move_tool_bar_x.value = offsetX.value + e.translationX;
         move_tool_bar_y.value = offsetY.value + e.translationY;
     })
-    .onEnd(() => {
+    .onEnd((e) => {
         //offsetX.value = move_tool_bar_x.value;
         //offsetY.value = move_tool_bar_y.value;
-        offsetX.value = withTiming(move_tool_bar_x.value);
-        offsetY.value = withTiming(move_tool_bar_y.value);
+        // offsetX.value = withTiming(move_tool_bar_x.value);
+        // offsetY.value = withTiming(move_tool_bar_y.value);
+        offsetX.value = withSpring(move_tool_bar_x.value);
+        offsetY.value = withSpring(move_tool_bar_y.value);
+        runOnJS(updateHandedness)(e.absoluteX);
+
     });
 
     const move_tool_bar_style = useAnimatedStyle(() => ({
@@ -194,18 +239,25 @@ export default function App() {
 
                     ]}
                 >
-                    {ToolBarButtons.map((button, index) => (
-                        <RenderToolbarButton
-                            item={button}
-                            index={index}
-                            scrollOffset={scrollOffset}
-                            activeY={activeY}
-                            height={50}
-                            activeItemIndex={activeItemIndex}
-                            toolbarY={toolbarY}
-                            move_tool_bar_y={move_tool_bar_y}
+                    {(isToolbarOpen ? ToolBarButtons : ToolBarButtonsClosed).map((button, index) => (
+                        <Animated.View
                             key={`toolbar-${index}`}
-                        />
+                            entering={FadeIn.delay(index * 100).springify()}
+                            exiting={FadeOut.duration(200)}
+                            layout={Layout.springify()} 
+                        >
+                            <RenderToolbarButton
+                                item={button}
+                                index={index}
+                                scrollOffset={scrollOffset}
+                                activeY={activeY}
+                                height={50}
+                                activeItemIndex={activeItemIndex}
+                                toolbarY={toolbarY}
+                                move_tool_bar_y={move_tool_bar_y}
+                                isLeftHanded={isLeftHanded}
+                            />
+                        </Animated.View>
                     ))}
                     { /* Reorder To Move Around the Screen */}
                 </Animated.ScrollView>
